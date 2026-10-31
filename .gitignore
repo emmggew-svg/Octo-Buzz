@@ -1,4 +1,6 @@
 node_modules/
 dist/
+.vite/
+.shots/
 src-tauri/target/
 src-tauri/gen/

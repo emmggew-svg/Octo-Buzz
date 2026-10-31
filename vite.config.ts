@@ -7,7 +7,12 @@ export default defineConfig({
     port: 1420,
     strictPort: true,
     watch: {
-      ignored: ["**/src-tauri/**"],
+      ignored: [
+        (path: string) => path.split(/[\\/]/).includes("src-tauri"),
+        "**/node_modules/**",
+        "**/dist/**",
+        "**/.shots/**",
+      ],
     },
   },
   envPrefix: ["VITE_", "TAURI_ENV_", "TAURI_"],

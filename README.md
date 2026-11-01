@@ -1,2 +1,78 @@
 # Octo-Buzz
-Octo-Buzz
+
+Ekranın üst-ortasında duran, fareni takip eden pixel-art ahtapot. Tauri + WebView ile
+yazılmış, masaüstünde transparan ve tıklamaları geçiren bir katman olarak çalışır.
+
+## Ne yapıyor?
+
+- **Fareyi takip eder.** Göz bebekleri imlecin olduğu yöne bakar, 8 dokunaç yavaşça
+  salınır ve imlece doğru uzanır; gövde panel içinde hafifçe sağa sola kayar.
+- **Üst-orta panel.** 480×208 px, yuvarlak köşeli koyu cam görünümlü kutu; içinde
+  sağ üstte ayar dişlisi var.
+- **Ctrl+Q (basılı tut).** En yakın dokunaç kutudan çıkıp fareye uzanır; basılı tuttuğun
+  sürece fareyi canlı takip eder, bıraktığın anda geri çekilir.
+- **Kanca.** Fare 560 px'ten uzaktaysa kolun ucundan halatlı bir kanca fırlar ve
+  farenin olduğu noktaya gider — böylece ekranın tamamına erişebilir.
+- **Küçük ruh hali.** İmleç yakına gelince ağzı açılır, ara sıra göz kırpar, baloncuk
+  çıkarır; panel içinde nefes alır gibi sallanır.
+- **Ayar sidebar'ı.** Dişliye tıklayınca soldan kayar: General, Features, API, Appearance
+  bölümleri (içerikleri henüz boş) ve altta ortalanmış Instagram / GitHub / Web ikonları.
+  GitHub ikonu bu depoyu açar; diğerleri şimdilik "Coming Soon".
+- **Sistem tepsisi.** Göster / Gizle ve Çıkış.
+
+## Kurulum
+
+Gereksinimler: Windows 10/11, [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)
+(Windows 11'de gelir), Node 18+, Rust 1.80+.
+
+```bash
+npm install
+npm run tauri dev      # geliştirme: pencere anında açılır
+npm run tauri build    # üretim derlemesi (src-tauri/target/release)
+```
+
+Uygulamayı kapatmak için sistem tepsisindeki ahtapot simgesi → **Çıkış**.
+
+### İkonlar
+
+`assets/icon.png` bağımlılıksız bir Node betiğiyle üretilir, ardından tüm platform
+ikonları türetilir:
+
+```bash
+node tools/make-icon.mjs
+npx tauri icon assets/icon.png
+```
+
+## Proje yapısı
+
+```
+src/
+  main.ts      pencere düzeni, tıklama/sıcak bölge yönetimi, çizim sırası
+  octopus.ts   pixel-art ahtapot: sprite, dokunaç fiziği, kol uzatma + kanca
+  box.ts       üst-ortadaki panel ve ayar dişlisi
+  style.css    sidebar ve genel stiller
+src-tauri/
+  src/lib.rs   pencere/tepsi, global kısayol, imleç yoklaması, sıcak bölge anahtarı
+  icons/       üretilmiş uygulama ikonları
+tools/
+  make-icon.mjs bağımlılıksız PNG ikon üretici
+```
+
+## Nasıl çalışıyor?
+
+Pencere tam ekran, transparan, daima-üstte ve **tıklama geçiren** durumda. Rust tarafı
+16 ms'de bir global imleç konumunu okuyup webview'e gönderiyor; böylece ahtapot,
+pencere odak olmasa bile fareyi görebiliyor. Ayar dişlisi ve açık sidebar için
+`set_ignore_cursor_events` anlık olarak kapatılıp açılıyor — yani ekranın geri kalanı
+her zaman masaüstüne geçirmeye devam ediyor.
+
+Ahtapot 96 px'lik düşük çözünürlüklü bir sprite'a çizilip yumuşatma kapalı
+yakınlaştırılıyor; bu yüzden kenarlar pixel-art gibi duruyor.
+
+## Bilinen sınırlar
+
+- yalnızca birincil monitörde çalışır
+- çalıştığı sürece **Ctrl+Q** sistem genelinde bu uygulama tarafından yakalanır
+- API sağlayıcıları (Gemini, Claude, OpenRouter, NVIDIA…) henüz bağlanmadı; sidebar'daki
+  bölümler bu iş için hazır
+- lisans henüz belirlenmedi

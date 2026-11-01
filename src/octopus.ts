@@ -10,6 +10,7 @@ const SCREEN_SCALE = (RENDER / DESIGN) * PIXEL_SCALE;
 const HEAD_ART_Y = 52;
 
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
+const wrapAngle = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 
 const MAX_REACH = 560;
 const REACH_OUT_TIME = 0.45;
@@ -72,6 +73,9 @@ export class Octopus {
   private tentacles: Tentacle[] = [];
   private reach: ReachState | null = null;
   private reachAmount = 0;
+  private pull: { side: number; index: number; t: number } | null = null;
+  private occlusion = 0;
+  private box: BoxRect = { x: 0, y: 0, w: 0, h: 0 };
   private armCanvas: HTMLCanvasElement | null = null;
   private actx: CanvasRenderingContext2D | null = null;
 
@@ -133,10 +137,67 @@ export class Octopus {
     }
   }
 
+  isReaching() {
+    return !!this.reach;
+  }
+
+  setOcclusion(score: number) {
+    this.occlusion = clamp(score, 0, 1);
+  }
+
+  /** Hook a random tentacle on `side` (-1 left, 1 right) onto the panel rim and drag. */
+  startPull(side: number) {
+    const pick = side < 0 ? Math.floor(Math.random() * 4) : 4 + Math.floor(Math.random() * 4);
+    this.pull = { side, index: pick, t: 0 };
+  }
+
+  private pullTarget(): Vec {
+    const box = this.box;
+    const edgeX = box.x + box.w / 2 + (this.pull?.side ?? 1) * (box.w / 2 - 52);
+    const edgeY = box.y + box.h - 18;
+    return {
+      x: DESIGN / 2 + (edgeX - this.head.x) / SCREEN_SCALE,
+      y: HEAD_ART_Y + (edgeY - this.head.y) / SCREEN_SCALE,
+    };
+  }
+
+  private buildPullTentacle(ten: Tentacle, t: number, target: Vec): Shape {
+    const dx = target.x - ten.rootX;
+    const dy = target.y - ten.rootY;
+    const dist = Math.hypot(dx, dy) || 1;
+    const aim = Math.atan2(dy, dx);
+    const steps = Math.max(16, Math.round(dist * 0.5));
+
+    let a = ten.baseAngle;
+    let x = ten.rootX;
+    let y = ten.rootY;
+    const pts: Vec[] = [{ x, y }];
+
+    for (let i = 1; i <= steps; i++) {
+      const frac = i / steps;
+      a += wrapAngle(aim - a) * Math.min(0.4, 0.08 + frac * 0.4) + Math.sin(t * 2.4 + frac * 4) * 0.015;
+      x += Math.cos(a) * (dist / steps);
+      y += Math.sin(a) * (dist / steps);
+      pts.push({ x, y });
+    }
+
+    const widths = pts.map((_, i) =>
+      Math.max(2.6, 9.5 * (1 - 0.7 * (i / (pts.length - 1)))),
+    );
+
+    return { pts, widths, curl: -Math.sign(dx || 1) };
+  }
+
   update(dt: number, cursor: Vec, box: BoxRect, vw: number) {
     this.time += dt;
     this.cursor = cursor;
+    this.box = box;
     const t = this.time;
+
+    if (this.pull) {
+      this.pull.t += dt;
+      if (this.pull.t > 1.9) this.pull = null;
+    }
 
     const half = (DESIGN / 2) * SCREEN_SCALE;
     const pad = 26;
@@ -432,10 +493,16 @@ export class Octopus {
     const t = this.time;
     const lean = clamp((this.cursor.x - this.head.x) * 0.0005, -0.28, 0.28);
     const hidden = this.reach && this.reachAmount > 0.02 ? this.reach.armIndex : -1;
+    const pulling = this.pull && this.pull.t < 1.7 ? this.pull : null;
+    const target = pulling ? this.pullTarget() : null;
     const shapes: Shape[] = [];
     this.tentacles.forEach((ten, i) => {
       if (i === hidden) return;
-      shapes.push(this.buildTentacle(ten, t, lean));
+      if (pulling && target && i === pulling.index) {
+        shapes.push(this.buildPullTentacle(ten, t, target));
+      } else {
+        shapes.push(this.buildTentacle(ten, t, lean));
+      }
     });
 
     s.lineCap = "round";
@@ -523,6 +590,7 @@ export class Octopus {
     const open = Math.hypot(dx, dy) < 240;
 
     const eyes = [59, 101];
+    const eyeRy = 9.8 - this.occlusion * 1.9;
     for (const ex of eyes) {
       if (this.blink > 0) {
         s.strokeStyle = COLORS.eye;
@@ -536,7 +604,7 @@ export class Octopus {
       }
 
       s.beginPath();
-      s.ellipse(ex, 53, 7.6, 9.8, 0, 0, TAU);
+      s.ellipse(ex, 53, 7.6, eyeRy, 0, 0, TAU);
       s.fillStyle = COLORS.eye;
       s.fill();
 

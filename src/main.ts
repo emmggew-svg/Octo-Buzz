@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import "./style.css";
 import { drawBox, drawSettings, layoutBox, settingsIconRect } from "./box";
 import { Octopus } from "./octopus";
+import { renderSection } from "./settings";
 
 type CursorPos = { x: number; y: number };
 type Zone = { x: number; y: number; w: number; h: number };
@@ -123,6 +124,8 @@ function updateAvoidance(dt: number) {
   }
 
   const reaching = octopus.isReaching();
+  // Pointer resting on the panel means the user is aiming at it — stop sliding the target away.
+  const onPanel = inZone(box, target.x, target.y);
   const better = Math.min(occ.left, occ.right);
   const room = Math.max(120, (innerWidth - box.w) / 2 - 24);
   const dodgeSide = occ.left <= occ.right ? -1 : 1;
@@ -130,6 +133,7 @@ function updateAvoidance(dt: number) {
   if (
     !sidebarOpen &&
     !reaching &&
+    !onPanel &&
     reachLock === 0 &&
     cooldown === 0 &&
     avoidSide === 0 &&
@@ -142,7 +146,11 @@ function updateAvoidance(dt: number) {
     rippleAt = clock;
     cooldown = PULL_COOLDOWN;
     busyFor = 0;
-  } else if (avoidSide !== 0 && (clearFor > CLEAR_HOLD || (busyFor > BUSY_HOLD && dodgeSide !== avoidSide))) {
+  } else if (
+    avoidSide !== 0 &&
+    !onPanel &&
+    (clearFor > CLEAR_HOLD || (busyFor > BUSY_HOLD && dodgeSide !== avoidSide))
+  ) {
     avoidSide = 0;
     shiftTarget = 0;
     cooldown = RETURN_COOLDOWN;
@@ -150,7 +158,7 @@ function updateAvoidance(dt: number) {
     busyFor = 0;
   }
 
-  if (!reaching) {
+  if (!reaching && !onPanel) {
     shift += (shiftTarget - shift) * Math.min(1, dt * 3.6);
   }
   box = layoutBox(innerWidth, shift);
@@ -212,8 +220,10 @@ navEl.addEventListener("click", (event) => {
   navEl.querySelectorAll<HTMLElement>(".nav-item").forEach((el) => {
     el.classList.toggle("active", el === item);
   });
-  bodyEl.dataset.section = item.dataset.section ?? "";
+  renderSection(bodyEl, item.dataset.section ?? "");
 });
+
+renderSection(bodyEl, bodyEl.dataset.section ?? "general");
 
 document.querySelector<HTMLButtonElement>("#link-github")!.addEventListener("click", () => {
   if (isTauri) {

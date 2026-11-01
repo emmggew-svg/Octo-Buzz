@@ -9,6 +9,8 @@ use tauri::{
 };
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
+mod api;
+
 #[derive(Clone, Serialize)]
 struct CursorPayload {
     x: f64,
@@ -198,7 +200,14 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             set_hot_zones,
             screen_insets,
-            open_repo
+            open_repo,
+            api::api_providers,
+            api::api_save_key,
+            api::api_clear_key,
+            api::api_select,
+            api::api_test,
+            api::api_models,
+            api::open_key_page
         ])
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()

@@ -103,7 +103,16 @@ export class Octopus {
   }
 
   triggerReach(cursor: Vec) {
-    if (this.reach && this.reach.phase !== "in") return;
+    this.pull = null;
+
+    if (this.reach && this.reach.phase !== "in") {
+      this.reach.target.x = cursor.x;
+      this.reach.target.y = cursor.y;
+      this.reach.phase = "hold";
+      this.reach.reachable =
+        Math.hypot(cursor.x - this.head.x, cursor.y - (this.head.y + 26)) <= MAX_REACH;
+      return;
+    }
 
     const ox = this.head.x - (DESIGN / 2) * SCREEN_SCALE;
     const oy = this.head.y - HEAD_ART_Y * SCREEN_SCALE;
@@ -493,7 +502,8 @@ export class Octopus {
     const t = this.time;
     const lean = clamp((this.cursor.x - this.head.x) * 0.0005, -0.28, 0.28);
     const hidden = this.reach && this.reachAmount > 0.02 ? this.reach.armIndex : -1;
-    const pulling = this.pull && this.pull.t < 1.7 ? this.pull : null;
+    const pulling =
+      this.pull && this.pull.t < 1.7 && this.pull.index !== hidden ? this.pull : null;
     const target = pulling ? this.pullTarget() : null;
     const shapes: Shape[] = [];
     this.tentacles.forEach((ten, i) => {

@@ -4,13 +4,18 @@ import "./style.css";
 import { drawBox, drawSettings, layoutBox, settingsIconRect } from "./box";
 import { Octopus } from "./octopus";
 
+type CursorPos = { x: number; y: number };
 type Zone = { x: number; y: number; w: number; h: number };
 
 const SIDEBAR_MARGIN = 16;
-const OCCLUDE_ON = 9;
-const OCCLUDE_OFF = 3;
-const PULL_COOLDOWN = 9;
-const RETURN_DELAY = 3.2;
+const OCCLUDE_ON = 12;
+const OCCLUDE_OFF = 4;
+const OCCLUDE_BETTER = 0.6;
+const BUSY_HOLD = 1.6;
+const CLEAR_HOLD = 3;
+const PULL_COOLDOWN = 12;
+const RETURN_COOLDOWN = 25;
+const REACH_LOCKOUT = 1.8;
 
 const canvas = document.querySelector<HTMLCanvasElement>("#scene")!;
 const ctx = canvas.getContext("2d")!;
@@ -34,8 +39,9 @@ let shift = 0;
 let shiftTarget = 0;
 let avoidSide = 0;
 let cooldown = 0;
-let highStreak = 0;
-let lowStreak = 0;
+let busyFor = 0;
+let clearFor = 0;
+let reachLock = 0;
 let rippleAt = -10;
 let zoneTimer = 0;
 
@@ -103,30 +109,50 @@ function resize() {
 /** Busy content under the panel? Grab the rim with a tentacle and drag the box aside. */
 function updateAvoidance(dt: number) {
   cooldown = Math.max(0, cooldown - dt);
+  reachLock = Math.max(0, reachLock - dt);
 
-  if (occ.under > OCCLUDE_ON) highStreak++;
-  else highStreak = 0;
-  if (occ.under < OCCLUDE_OFF) lowStreak++;
-  else lowStreak = 0;
+  if (occ.under > OCCLUDE_ON) {
+    busyFor += dt;
+    clearFor = 0;
+  } else if (occ.under < OCCLUDE_OFF) {
+    clearFor += dt;
+    busyFor = 0;
+  } else {
+    busyFor = Math.max(0, busyFor - dt);
+    clearFor = Math.max(0, clearFor - dt);
+  }
 
-  const busy = !sidebarOpen && !octopus.isReaching() && cooldown === 0;
+  const reaching = octopus.isReaching();
+  const better = Math.min(occ.left, occ.right);
+  const room = Math.max(120, (innerWidth - box.w) / 2 - 24);
+  const dodgeSide = occ.left <= occ.right ? -1 : 1;
 
-  if (busy && avoidSide === 0 && highStreak >= 3) {
-    avoidSide = occ.left <= occ.right ? -1 : 1;
-    const room = Math.max(120, (innerWidth - box.w) / 2 - 24);
+  if (
+    !sidebarOpen &&
+    !reaching &&
+    reachLock === 0 &&
+    cooldown === 0 &&
+    avoidSide === 0 &&
+    busyFor > BUSY_HOLD &&
+    better < occ.under * OCCLUDE_BETTER
+  ) {
+    avoidSide = dodgeSide;
     shiftTarget = avoidSide * Math.min(260, room);
     octopus.startPull(avoidSide);
     rippleAt = clock;
     cooldown = PULL_COOLDOWN;
-    highStreak = 0;
-  } else if (avoidSide !== 0 && lowStreak * 0.4 > RETURN_DELAY) {
+    busyFor = 0;
+  } else if (avoidSide !== 0 && (clearFor > CLEAR_HOLD || (busyFor > BUSY_HOLD && dodgeSide !== avoidSide))) {
     avoidSide = 0;
     shiftTarget = 0;
-    cooldown = PULL_COOLDOWN;
-    lowStreak = 0;
+    cooldown = RETURN_COOLDOWN;
+    clearFor = 0;
+    busyFor = 0;
   }
 
-  shift += (shiftTarget - shift) * Math.min(1, dt * 3.6);
+  if (!reaching) {
+    shift += (shiftTarget - shift) * Math.min(1, dt * 3.6);
+  }
   box = layoutBox(innerWidth, shift);
 
   const moving = Math.abs(shiftTarget - shift) > 1.5;
@@ -146,9 +172,18 @@ function triggerReach() {
   octopus.triggerReach({ x: target.x, y: target.y });
 }
 
+function endReach() {
+  octopus.endReach();
+  reachLock = REACH_LOCKOUT;
+}
+
 if (isTauri) {
+  listen<CursorPos>("cursor", (event) => {
+    target.x = event.payload.x;
+    target.y = event.payload.y;
+  });
   listen("reach-start", triggerReach);
-  listen("reach-end", () => octopus.endReach());
+  listen("reach-end", endReach);
   listen<{ under: number; left: number; right: number }>("occlusion", (event) => {
     occ = { under: event.payload.under, left: event.payload.left, right: event.payload.right };
     octopus.setOcclusion(Math.max(0, Math.min(1, (occ.under - 4) / 18)));
@@ -161,7 +196,7 @@ if (isTauri) {
     }
   });
   addEventListener("keyup", (event) => {
-    if (event.key.toLowerCase() === "q") octopus.endReach();
+    if (event.key.toLowerCase() === "q") endReach();
   });
 }
 

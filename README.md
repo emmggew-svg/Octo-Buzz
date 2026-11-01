@@ -111,5 +111,10 @@ chat isteği.
   geçirmiyor; ekranın geri kalanı her zaman geçirmeye devam ediyor
 - cevaplar tek seferde geliyor (token token akıtma yok), sohbet geçmişi pencere
   kapanınca sıfırlanır
+- Gemini'nin thinking modelleri çok yavaş olabiliyor: ölçülen süre 15 sn ile
+  107 sn arasında değişti, bu yüzden sohbet zaman aşımı 150 sn. `thinkingBudget: 0`
+  gönderiliyor; aksi halde model tüm token bütçesini düşünmeye harcayıp **boş**
+  cevap dönüştürdü. Daha hızlı bir cevap için API bölümünden `gemini-3.5-flash-lite`
+  gibi hafif bir model seçilebilir.
 - General / Features / Appearance bölümleri henüz yer tutucu
 - lisans henüz belirlenmedi

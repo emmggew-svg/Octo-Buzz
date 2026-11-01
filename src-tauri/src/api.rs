@@ -178,12 +178,16 @@ pub struct Probe {
     latency_ms: u64,
 }
 
-fn agent() -> ureq::Agent {
+fn agent(timeout: Duration) -> ureq::Agent {
     ureq::config::Config::builder()
-        .timeout_global(Some(Duration::from_secs(15)))
+        .timeout_global(Some(timeout))
         .build()
         .new_agent()
 }
+
+const PROBE_TIMEOUT: Duration = Duration::from_secs(15);
+/// Thinking models can spend longer than a probe before the first token arrives.
+const CHAT_TIMEOUT: Duration = Duration::from_secs(150);
 
 /// Non-2xx arrives back as a status code instead of an error, so the UI can name the reason.
 fn finish(result: Result<http::Response<ureq::Body>, ureq::Error>) -> Result<(u16, Value), String> {
@@ -202,15 +206,15 @@ fn finish(result: Result<http::Response<ureq::Body>, ureq::Error>) -> Result<(u1
 }
 
 fn get(url: &str, headers: &[(&str, &str)]) -> Result<(u16, Value), String> {
-    let mut request = agent().get(url);
+    let mut request = agent(PROBE_TIMEOUT).get(url);
     for (name, value) in headers {
         request = request.header(*name, *value);
     }
     finish(request.call())
 }
 
-fn post(url: &str, headers: &[(&str, &str)], body: &Value) -> Result<(u16, Value), String> {
-    let mut request = agent().post(url);
+fn post(url: &str, headers: &[(&str, &str)], body: &Value, timeout: Duration) -> Result<(u16, Value), String> {
+    let mut request = agent(timeout).post(url);
     for (name, value) in headers {
         request = request.header(*name, *value);
     }
@@ -253,7 +257,7 @@ fn probe_blocking(provider: &str, key: &str, model: &str) -> Result<u16, String>
                 "messages": [{ "role": "user", "content": "ping" }],
                 "max_tokens": 1,
             });
-            post(NVIDIA_CHAT, &[("authorization", bearer.as_str())], &body)?.0
+            post(NVIDIA_CHAT, &[("authorization", bearer.as_str())], &body, PROBE_TIMEOUT)?.0
         }
         other => return Err(format!("bilinmeyen sağlayıcı: {other}")),
     };
@@ -488,7 +492,12 @@ fn ask(provider: &str, key: &str, model: &str, turns: &[Turn]) -> Result<String,
             let body = serde_json::json!({
                 "systemInstruction": { "parts": [{ "text": PERSONA }] },
                 "contents": contents,
-                "generationConfig": { "maxOutputTokens": 220, "temperature": 0.9 },
+                "generationConfig": {
+                    "maxOutputTokens": 512,
+                    "temperature": 0.9,
+                    // Without this the model spends the whole budget thinking and returns empty text.
+                    "thinkingConfig": { "thinkingBudget": 0 },
+                },
             });
             post(
                 &format!(
@@ -496,6 +505,7 @@ fn ask(provider: &str, key: &str, model: &str, turns: &[Turn]) -> Result<String,
                 ),
                 &[],
                 &body,
+                CHAT_TIMEOUT,
             )?
         }
         "claude" => {
@@ -510,7 +520,7 @@ fn ask(provider: &str, key: &str, model: &str, turns: &[Turn]) -> Result<String,
                 .collect();
             let body = serde_json::json!({
                 "model": model,
-                "max_tokens": 220,
+                "max_tokens": 120,
                 "system": PERSONA,
                 "messages": messages,
             });
@@ -518,9 +528,10 @@ fn ask(provider: &str, key: &str, model: &str, turns: &[Turn]) -> Result<String,
                 "https://api.anthropic.com/v1/messages",
                 &[
                     ("x-api-key", key),
-                    ("anthropic-version", "2023-06-01".into()),
+                    ("anthropic-version", "2023-06-01"),
                 ],
                 &body,
+                CHAT_TIMEOUT,
             )?
         }
         other @ ("openrouter" | "nvidia") => {
@@ -532,8 +543,8 @@ fn ask(provider: &str, key: &str, model: &str, turns: &[Turn]) -> Result<String,
                     "content": turn.text,
                 })
             }));
-            let body = serde_json::json!({ "model": model, "max_tokens": 220, "messages": messages });
-            post(url, &[("authorization", bearer.as_str())], &body)?
+            let body = serde_json::json!({ "model": model, "max_tokens": 120, "messages": messages });
+            post(url, &[("authorization", bearer.as_str())], &body, CHAT_TIMEOUT)?
         }
         unknown => return Err(format!("bilinmeyen sağlayıcı: {unknown}")),
     };
@@ -567,7 +578,18 @@ fn ask(provider: &str, key: &str, model: &str, turns: &[Turn]) -> Result<String,
             .map(str::to_string),
     };
 
-    reply.ok_or_else(|| "Model boş bir cevap döndürdü".into())
+    let reason = value
+        .get("candidates")
+        .and_then(Value::as_array)
+        .and_then(|list| list.first())
+        .and_then(|first| first.get("finishReason"))
+        .and_then(Value::as_str);
+
+    reply.ok_or_else(|| match reason {
+        Some("MAX_TOKENS") => "Model cevap yazamadan token bütçesini tüketti".into(),
+        Some("SAFETY") => "Cevap güvenlik filtresine takıldı".into(),
+        _ => "Model boş bir cevap döndürdü".into(),
+    })
 }
 
 #[tauri::command]
@@ -621,4 +643,3 @@ pub async fn chat_send(app: AppHandle, history: Vec<Turn>) -> Result<Answer, Str
         latency_ms: started.elapsed().as_millis() as u64,
     })
 }
-

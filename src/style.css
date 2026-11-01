@@ -424,3 +424,236 @@ body {
 .probe.bad {
   color: #e79ab0;
 }
+
+.dock {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  bottom: calc(16px + var(--taskbar-inset, 0px));
+  width: var(--dock-w, 380px);
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+  border-radius: 22px;
+  background: linear-gradient(180deg, rgba(29, 27, 34, 0.95), rgba(17, 16, 21, 0.97));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55);
+}
+
+.dock-grip {
+  position: absolute;
+  left: -4px;
+  top: 0;
+  bottom: 0;
+  width: 14px;
+  cursor: ew-resize;
+}
+
+.dock-grip::after {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  width: 3px;
+  height: 48px;
+  margin-top: -24px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.14);
+  transition: background 140ms ease;
+}
+
+.dock-grip:hover::after,
+.dock-grip.dragging::after {
+  background: rgba(199, 160, 212, 0.7);
+}
+
+.dock-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  height: 24px;
+  padding: 0 2px 0 8px;
+}
+
+.dock-title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.dock-status {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: rgba(255, 255, 255, 0.32);
+}
+
+.dock-log {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 4px 12px 2px;
+  overflow-y: auto;
+}
+
+.msg {
+  max-width: 86%;
+  padding: 8px 11px;
+  border-radius: 14px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.msg.me {
+  align-self: flex-end;
+  border-bottom-right-radius: 6px;
+  background: rgba(199, 160, 212, 0.18);
+  border: 1px solid rgba(199, 160, 212, 0.32);
+  color: #f2e8f6;
+}
+
+.msg.octo {
+  align-self: flex-start;
+  border-bottom-left-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.msg.sys {
+  align-self: center;
+  max-width: 100%;
+  padding: 2px 6px;
+  font-size: 11px;
+  color: #e79ab0;
+}
+
+.msg.thinking {
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.composer {
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.composer-text {
+  display: block;
+  width: 100%;
+  min-height: 46px;
+  max-height: 130px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  font-family: inherit;
+  font-size: 12.5px;
+  line-height: 1.5;
+  resize: none;
+  overflow-y: auto;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.composer-text:focus {
+  outline: none;
+  border-color: rgba(199, 160, 212, 0.55);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.composer-text::placeholder {
+  color: rgba(255, 255, 255, 0.28);
+}
+
+.composer-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 2px 0;
+}
+
+.composer-grow {
+  flex: 1;
+}
+
+.tool {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 7px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.62);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.tool:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.tool svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.chip-dot.on {
+  background: #8fd6a6;
+}
+
+.send {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 50%;
+  border: none;
+  background: #c7a0d4;
+  color: #1b1523;
+  cursor: pointer;
+}
+
+.send:hover:not(:disabled) {
+  background: #d8b8e3;
+}
+
+.send:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.send svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}

@@ -71,6 +71,43 @@
         </button>
       </footer>
     </aside>
+
+    <aside id="dock" class="dock" aria-label="Octo ile sohbet">
+      <div class="dock-grip" id="dock-grip" title="Sürükleyerek boyutlandır"></div>
+
+      <header class="dock-head">
+        <span class="dock-title">Octo</span>
+        <span class="dock-status" id="dock-status">bağlanıyor…</span>
+      </header>
+
+      <div class="dock-log" id="dock-log" role="log" aria-live="polite"></div>
+
+      <form class="composer" id="composer" autocomplete="off">
+        <textarea
+          id="composer-text"
+          class="composer-text"
+          rows="1"
+          placeholder="Octo'ya bir şey yaz…"
+        ></textarea>
+        <div class="composer-bar">
+          <button type="button" class="tool" id="tool-clear" title="Sohbeti temizle" aria-label="Sohbeti temizle">
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8h5.8l.6-8" />
+            </svg>
+          </button>
+          <button type="button" class="tool chip" id="tool-provider" title="Sağlayıcı ve model">
+            <span class="chip-dot" id="chip-dot"></span>
+            <span id="chip-label">API yok</span>
+          </button>
+          <span class="composer-grow"></span>
+          <button type="submit" class="send" id="composer-send" title="Gönder" aria-label="Gönder">
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M8 12.5V3.5M4.2 7.2L8 3.4l3.8 3.8" />
+            </svg>
+          </button>
+        </div>
+      </form>
+    </aside>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

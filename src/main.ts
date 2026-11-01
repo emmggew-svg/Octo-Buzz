@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import "./style.css";
 import { drawBox, drawSettings, layoutBox, settingsIconRect } from "./box";
+import { initDock } from "./dock";
 import { Octopus } from "./octopus";
 import { renderSection } from "./settings";
 
@@ -48,6 +49,13 @@ let zoneTimer = 0;
 
 const octopus = new Octopus();
 
+function showSection(name: string) {
+  navEl.querySelectorAll<HTMLElement>(".nav-item").forEach((el) => {
+    el.classList.toggle("active", el.dataset.section === name);
+  });
+  renderSection(bodyEl, name);
+}
+
 function gearZone(): Zone {
   const rect = settingsIconRect(box);
   const pad = 8;
@@ -70,6 +78,7 @@ function reportZones() {
   invoke("set_hot_zones", {
     gear: gearZone(),
     sidebar: sidebarOpen ? sidebarZone() : null,
+    dock: dock.zone(),
     panel: { x: box.x, y: box.y, w: box.w, h: box.h },
   }).catch(() => {});
 }
@@ -79,6 +88,7 @@ function setSidebar(open: boolean) {
   sidebarOpen = open;
   sidebarEl.classList.toggle("open", open);
   sidebarEl.setAttribute("aria-hidden", String(!open));
+  if (!open) dock.refresh();
   reportZones();
 }
 
@@ -127,7 +137,10 @@ function updateAvoidance(dt: number) {
   // Pointer resting on the panel means the user is aiming at it — stop sliding the target away.
   const onPanel = inZone(box, target.x, target.y);
   const better = Math.min(occ.left, occ.right);
-  const room = Math.max(120, (innerWidth - box.w) / 2 - 24);
+  // Never slide the panel under the always-open dock on the right.
+  const dockLeft = dock.left();
+  const roomFor = (side: number) =>
+    side < 0 ? box.x - 24 : dockLeft - 24 - (box.x + box.w);
   const dodgeSide = occ.left <= occ.right ? -1 : 1;
 
   if (
@@ -138,10 +151,11 @@ function updateAvoidance(dt: number) {
     cooldown === 0 &&
     avoidSide === 0 &&
     busyFor > BUSY_HOLD &&
+    roomFor(dodgeSide) > 60 &&
     better < occ.under * OCCLUDE_BETTER
   ) {
     avoidSide = dodgeSide;
-    shiftTarget = avoidSide * Math.min(260, room);
+    shiftTarget = avoidSide * Math.min(260, Math.max(0, roomFor(avoidSide)));
     octopus.startPull(avoidSide);
     rippleAt = clock;
     cooldown = PULL_COOLDOWN;
@@ -217,13 +231,10 @@ closeEl.addEventListener("click", () => setSidebar(false));
 navEl.addEventListener("click", (event) => {
   const item = (event.target as HTMLElement).closest<HTMLElement>(".nav-item");
   if (!item) return;
-  navEl.querySelectorAll<HTMLElement>(".nav-item").forEach((el) => {
-    el.classList.toggle("active", el === item);
-  });
-  renderSection(bodyEl, item.dataset.section ?? "");
+  showSection(item.dataset.section ?? "");
 });
 
-renderSection(bodyEl, bodyEl.dataset.section ?? "general");
+showSection(bodyEl.dataset.section ?? "general");
 
 document.querySelector<HTMLButtonElement>("#link-github")!.addEventListener("click", () => {
   if (isTauri) {
@@ -231,6 +242,17 @@ document.querySelector<HTMLButtonElement>("#link-github")!.addEventListener("cli
   } else {
     window.open("https://github.com/emmggew-svg/Octo-Buzz", "_blank");
   }
+});
+
+// Created late on purpose: its first zone report needs the helpers above to exist.
+const dock = initDock({
+  speak: (text) => octopus.say(text),
+  think: (on) => octopus.setThinking(on),
+  refreshZones: () => reportZones(),
+  openSettings: () => {
+    setSidebar(true);
+    showSection("api");
+  },
 });
 
 resize();
@@ -266,7 +288,9 @@ function frame(now: number) {
   ctx.clip();
   octopus.draw(ctx);
   ctx.restore();
+  octopus.drawBubble(ctx, innerWidth, innerHeight, dock.left());
   requestAnimationFrame(frame);
 }
 
 requestAnimationFrame(frame);
+setTimeout(() => dock.greet(), 900);

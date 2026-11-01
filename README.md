@@ -27,6 +27,12 @@ yazılmış, masaüstünde transparan ve tıklamaları geçiren bir katman olara
   görünür) ve sağlayıcının kendi model listesini çekme. Anahtarlar **Windows kimlik
   deposunda** (`keyring`) durur; diske ve webview katmanına yazılmaz, ekranda yalnızca
   son dört karakteri görünür.
+- **Sohbet dock'u (sağda, her zaman açık).** Mesaj yazınca ahtapot seçili modelle
+  konuşur; cevap hem dock'taki balonlarda hem de panelin altında bir **konuşma balonu**
+  olarak görünür (beklerken üç nokta). Sol kenarındaki tutamacı sürükleyerek
+  genişletilir/küçültülür, çift tıklayınca dar/geniş arasında atlar, boyut hatırlanır.
+  Dock'un altındaki gönderme kutusu; temizle, aktif sağlayıcı + model etiketi ve
+  gönder düğmesi içerir — etikete tıklayınca API ayarları açılır.
 - **Sistem tepsisi.** Göster / Gizle ve Çıkış.
 
 ## Kurulum
@@ -62,6 +68,7 @@ src/
   octopus.ts   pixel-art ahtapot: sprite, dokunaç fiziği, kol uzatma + kanca
   box.ts       üst-ortadaki panel ve ayar dişlisi
   settings.ts  sidebar içeriği, API bölümü ve komut çağrıları
+  dock.ts      sağdaki sohbet dock'u: boyutlandırma, geçmiş, gönderme
   style.css    sidebar ve genel stiller
 src-tauri/
   src/lib.rs   pencere/tepsi, global kısayol, imleç yoklaması, sıcak bölge anahtarı
@@ -98,7 +105,9 @@ chat isteği.
 
 - yalnızca birincil monitörde çalışır
 - çalıştığı sürece **Ctrl+Q** sistem genelinde bu uygulama tarafından yakalanır
-- anahtarlar kaydedilip test edilebiliyor ama ahtapot henüz bu modelleri
-  konuşarak kullanmıyor (baloncuk/LLM entegrasyonu sıradaki adım)
+- dock ve sidebar kalıcı sıcak bölge olduğu için o dikdörtgenler masaüstüne
+  geçirmiyor; ekranın geri kalanı her zaman geçirmeye devam ediyor
+- cevaplar tek seferde geliyor (token token akıtma yok), sohbet geçmişi pencere
+  kapanınca sıfırlanır
 - General / Features / Appearance bölümleri henüz yer tutucu
 - lisans henüz belirlenmedi

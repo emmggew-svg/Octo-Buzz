@@ -29,6 +29,7 @@ struct RectArg {
 struct HotZones {
     gear: Option<RectArg>,
     sidebar: Option<RectArg>,
+    dock: Option<RectArg>,
     panel: Option<RectArg>,
     interactive: bool,
 }
@@ -169,11 +170,13 @@ fn set_hot_zones(
     zones: tauri::State<'_, Mutex<HotZones>>,
     gear: Option<RectArg>,
     sidebar: Option<RectArg>,
+    dock: Option<RectArg>,
     panel: Option<RectArg>,
 ) {
     if let Ok(mut zones) = zones.lock() {
         zones.gear = gear;
         zones.sidebar = sidebar;
+        zones.dock = dock;
         zones.panel = panel;
     }
 }
@@ -207,7 +210,8 @@ pub fn run() {
             api::api_select,
             api::api_test,
             api::api_models,
-            api::open_key_page
+            api::open_key_page,
+            api::chat_send
         ])
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
@@ -277,6 +281,7 @@ pub fn run() {
                                 let guard = zones.lock().unwrap();
                                 guard.gear.as_ref().is_some_and(|r| in_rect(r, x, y))
                                     || guard.sidebar.as_ref().is_some_and(|r| in_rect(r, x, y))
+                                    || guard.dock.as_ref().is_some_and(|r| in_rect(r, x, y))
                             };
                             let changed = {
                                 let mut guard = zones.lock().unwrap();

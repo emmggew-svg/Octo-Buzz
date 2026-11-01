@@ -18,6 +18,11 @@ const REACH_RETRACT_TIME = 0.35;
 const HOOK_OUT_TIME = 0.22;
 const HOOK_IN_TIME = 0.16;
 
+const SPEAK_SECONDS = 9;
+const BUBBLE_MAX_W = 320;
+const BUBBLE_LINE = 18;
+const BUBBLE_LINES = 4;
+
 const easeOutCubic = (x: number) => 1 - Math.pow(1 - x, 3);
 
 type ReachState = {
@@ -76,6 +81,10 @@ export class Octopus {
   private pull: { side: number; index: number; t: number } | null = null;
   private occlusion = 0;
   private box: BoxRect = { x: 0, y: 0, w: 0, h: 0 };
+  private speech = "";
+  private speechUntil = 0;
+  private speechStart = 0;
+  private thinking = false;
   private armCanvas: HTMLCanvasElement | null = null;
   private actx: CanvasRenderingContext2D | null = null;
 
@@ -160,6 +169,22 @@ export class Octopus {
     this.pull = { side, index: pick, t: 0 };
   }
 
+  /** Show a speech bubble under the panel; empty text hides it. */
+  say(text: string) {
+    const fresh = text !== this.speech;
+    this.speech = text;
+    this.thinking = false;
+    const seconds = Math.min(20, SPEAK_SECONDS + text.length * 0.06);
+    this.speechUntil = text ? this.time + seconds : 0;
+    if (fresh && text) this.speechStart = this.time;
+  }
+
+  setThinking(on: boolean) {
+    if (on && !this.thinking) this.speechStart = this.time;
+    this.thinking = on;
+    if (on) this.speech = "";
+  }
+
   private pullTarget(): Vec {
     const box = this.box;
     const edgeX = box.x + box.w / 2 + (this.pull?.side ?? 1) * (box.w / 2 - 52);
@@ -199,6 +224,7 @@ export class Octopus {
 
   update(dt: number, cursor: Vec, box: BoxRect, vw: number) {
     this.time += dt;
+    if (this.speech && this.time > this.speechUntil) this.speech = "";
     this.cursor = cursor;
     this.box = box;
     const t = this.time;
@@ -277,6 +303,88 @@ export class Octopus {
       DESIGN * SCREEN_SCALE,
       DESIGN * SCREEN_SCALE,
     );
+  }
+
+  drawBubble(ctx: CanvasRenderingContext2D, vw: number, vh: number, limit = vw) {
+    if (!this.speech && !this.thinking) return;
+
+    const thinking = this.thinking && !this.speech;
+    ctx.font = "13px 'Segoe UI', system-ui, sans-serif";
+    ctx.textBaseline = "middle";
+
+    const lines = thinking ? [""] : this.wrap(ctx, this.speech);
+    const widest = lines.reduce((max, line) => Math.max(max, ctx.measureText(line).width), 0);
+    const width = thinking ? 62 : Math.max(96, Math.min(BUBBLE_MAX_W, widest + 26));
+    const height = lines.length * BUBBLE_LINE + 16;
+
+    const right = Math.max(12, Math.min(vw, limit) - width - 12);
+    const x = clamp(this.head.x - width / 2, 12, right);
+    const y = Math.min(this.box.y + this.box.h + 16, vh - height - 12);
+    const tail = clamp(this.head.x, x + 24, x + width - 24);
+
+    const pop = easeOutCubic(clamp((this.time - this.speechStart) / 0.18, 0, 1));
+    ctx.save();
+    ctx.translate(tail, y);
+    ctx.scale(0.86 + 0.14 * pop, 0.86 + 0.14 * pop);
+    ctx.translate(-tail, -y);
+    ctx.globalAlpha = pop;
+
+    ctx.beginPath();
+    ctx.moveTo(x + 12, y);
+    ctx.lineTo(tail - 9, y);
+    ctx.lineTo(tail, y - 13);
+    ctx.lineTo(tail + 9, y);
+    ctx.lineTo(x + width - 12, y);
+    ctx.arcTo(x + width, y, x + width, y + 12, 12);
+    ctx.lineTo(x + width, y + height - 12);
+    ctx.arcTo(x + width, y + height, x + width - 12, y + height, 12);
+    ctx.lineTo(x + 12, y + height);
+    ctx.arcTo(x, y + height, x, y + height - 12, 12);
+    ctx.lineTo(x, y + 12);
+    ctx.arcTo(x, y, x + 12, y, 12);
+    ctx.closePath();
+    ctx.fillStyle = "#f4ebf8";
+    ctx.fill();
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = "#33204a";
+    ctx.stroke();
+
+    ctx.fillStyle = "#2a1b3d";
+    if (thinking) {
+      for (let i = 0; i < 3; i++) {
+        const phase = Math.sin(this.time * 5 - i * 0.9);
+        ctx.beginPath();
+        ctx.arc(x + width / 2 + (i - 1) * 13, y + height / 2 + phase * 2.5, 3.2, 0, TAU);
+        ctx.fill();
+      }
+    } else {
+      lines.forEach((line, i) => {
+        ctx.fillText(line, x + 13, y + 8 + BUBBLE_LINE * (i + 0.5));
+      });
+    }
+    ctx.restore();
+  }
+
+  private wrap(ctx: CanvasRenderingContext2D, text: string): string[] {
+    const limit = BUBBLE_MAX_W - 26;
+    const lines: string[] = [];
+    let line = "";
+
+    for (const word of text.replace(/\s+/g, " ").trim().split(" ")) {
+      const test = line ? `${line} ${word}` : word;
+      if (line && ctx.measureText(test).width > limit) {
+        lines.push(line);
+        line = word;
+      } else {
+        line = test;
+      }
+    }
+    if (line) lines.push(line);
+
+    if (lines.length <= BUBBLE_LINES) return lines;
+    const kept = lines.slice(0, BUBBLE_LINES);
+    kept[BUBBLE_LINES - 1] = `${kept[BUBBLE_LINES - 1].slice(0, 42)}…`;
+    return kept;
   }
 
   drawReach(ctx: CanvasRenderingContext2D, vw: number, vh: number) {

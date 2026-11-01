@@ -209,6 +209,29 @@ fn get(url: &str, headers: &[(&str, &str)]) -> Result<(u16, Value), String> {
     finish(request.call())
 }
 
+fn post(url: &str, headers: &[(&str, &str)], body: &Value) -> Result<(u16, Value), String> {
+    let mut request = agent().post(url);
+    for (name, value) in headers {
+        request = request.header(*name, *value);
+    }
+    finish(request.send_json(body))
+}
+
+fn error_text(value: &Value) -> Option<String> {
+    value
+        .get("error")
+        .and_then(|error| error.get("message").or_else(|| error.get("type")))
+        .and_then(Value::as_str)
+        .map(str::to_string)
+}
+
+fn fail(status: u16, provider: &str, value: &Value) -> String {
+    match error_text(value) {
+        Some(text) => text,
+        None => format!("{status} — {}", describe(status, provider)),
+    }
+}
+
 /// Cheap authenticated round-trip that proves the key works without spending tokens.
 fn probe_blocking(provider: &str, key: &str, model: &str) -> Result<u16, String> {
     let bearer = format!("Bearer {key}");
@@ -230,13 +253,7 @@ fn probe_blocking(provider: &str, key: &str, model: &str) -> Result<u16, String>
                 "messages": [{ "role": "user", "content": "ping" }],
                 "max_tokens": 1,
             });
-            finish(
-                agent()
-                    .post("https://integrate.api.nvidia.com/v1/chat/completions")
-                    .header("authorization", &bearer)
-                    .send_json(&body),
-            )?
-            .0
+            post(NVIDIA_CHAT, &[("authorization", bearer.as_str())], &body)?.0
         }
         other => return Err(format!("bilinmeyen sağlayıcı: {other}")),
     };
@@ -396,4 +413,187 @@ pub fn open_key_page(provider: String) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+const NVIDIA_CHAT: &str = "https://integrate.api.nvidia.com/v1/chat/completions";
+const OPENROUTER_CHAT: &str = "https://openrouter.ai/api/v1/chat/completions";
+
+const PERSONA: &str = concat!(
+    "Sen Octo'sun: ekranın üst kenarında asılı duran, pixel-art bir ahtapot evcil hayvanısın. ",
+    "Sekiz kolun var; Ctrl+Q'ye basılınca en yakın kolun fareye uzanır, yetişemeyince kolundan ",
+    "halatlı kanca fırlatır. Altında yazı varsa kendini kenara çeker. ",
+    "Kullanıcıyla Türkçe konuşursun. En fazla iki kısa cümle yaz, markdown ve madde işareti kullanma. ",
+    "Meraklı, biraz yaramaz, sıcak bir tonun var; kendi bedenin ve kolların hakkında konuşmayı seversin."
+);
+
+#[derive(Clone, Deserialize)]
+pub struct Turn {
+    role: String,
+    text: String,
+}
+
+impl Turn {
+    fn is_user(&self) -> bool {
+        self.role == "user"
+    }
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Answer {
+    text: String,
+    provider: String,
+    model: String,
+    latency_ms: u64,
+}
+
+fn texts(items: &[Value], keys: &[&str]) -> Option<String> {
+    let joined = items
+        .iter()
+        .filter_map(|item| {
+            keys.iter()
+                .filter_map(|key| item.get(*key).and_then(Value::as_str))
+                .next()
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+    if joined.trim().is_empty() {
+        return None;
+    }
+    Some(joined.trim().to_string())
+}
+
+fn ask(provider: &str, key: &str, model: &str, turns: &[Turn]) -> Result<String, String> {
+    let bearer = format!("Bearer {key}");
+    let (status, value) = match provider {
+        "gemini" => {
+            let contents: Vec<Value> = turns
+                .iter()
+                .map(|turn| {
+                    serde_json::json!({
+                        "role": if turn.is_user() { "user" } else { "model" },
+                        "parts": [{ "text": turn.text }],
+                    })
+                })
+                .collect();
+            let body = serde_json::json!({
+                "systemInstruction": { "parts": [{ "text": PERSONA }] },
+                "contents": contents,
+                "generationConfig": { "maxOutputTokens": 220, "temperature": 0.9 },
+            });
+            post(
+                &format!(
+                    "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
+                ),
+                &[],
+                &body,
+            )?
+        }
+        "claude" => {
+            let messages: Vec<Value> = turns
+                .iter()
+                .map(|turn| {
+                    serde_json::json!({
+                        "role": if turn.is_user() { "user" } else { "assistant" },
+                        "content": [{ "type": "text", "text": turn.text }],
+                    })
+                })
+                .collect();
+            let body = serde_json::json!({
+                "model": model,
+                "max_tokens": 220,
+                "system": PERSONA,
+                "messages": messages,
+            });
+            post(
+                "https://api.anthropic.com/v1/messages",
+                &[
+                    ("x-api-key", key),
+                    ("anthropic-version", "2023-06-01".into()),
+                ],
+                &body,
+            )?
+        }
+        other @ ("openrouter" | "nvidia") => {
+            let url = if other == "nvidia" { NVIDIA_CHAT } else { OPENROUTER_CHAT };
+            let mut messages = vec![serde_json::json!({ "role": "system", "content": PERSONA })];
+            messages.extend(turns.iter().map(|turn| {
+                serde_json::json!({
+                    "role": if turn.is_user() { "user" } else { "assistant" },
+                    "content": turn.text,
+                })
+            }));
+            let body = serde_json::json!({ "model": model, "max_tokens": 220, "messages": messages });
+            post(url, &[("authorization", bearer.as_str())], &body)?
+        }
+        unknown => return Err(format!("bilinmeyen sağlayıcı: {unknown}")),
+    };
+
+    if !(200..=299).contains(&status) {
+        return Err(fail(status, provider, &value));
+    }
+
+    let reply = match provider {
+        "gemini" => value
+            .get("candidates")
+            .and_then(Value::as_array)
+            .and_then(|list| list.first())
+            .and_then(|first| first.get("content"))
+            .and_then(|content| content.get("parts"))
+            .and_then(Value::as_array)
+            .and_then(|parts| texts(parts, &["text"])),
+        "claude" => value
+            .get("content")
+            .and_then(Value::as_array)
+            .and_then(|blocks| texts(blocks, &["text"])),
+        _ => value
+            .get("choices")
+            .and_then(Value::as_array)
+            .and_then(|list| list.first())
+            .and_then(|first| first.get("message"))
+            .and_then(|message| message.get("content"))
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+            .map(str::to_string),
+    };
+
+    reply.ok_or_else(|| "Model boş bir cevap döndürdü".into())
+}
+
+#[tauri::command]
+pub async fn chat_send(app: AppHandle, history: Vec<Turn>) -> Result<Answer, String> {
+    let settings = load_settings(&app);
+    let id = settings
+        .active
+        .clone()
+        .ok_or_else(|| "Önce API bölümünden bir sağlayıcı seç".to_string())?;
+    let name = spec(&id)?.name;
+    let key = read_key(&id).ok_or_else(|| format!("{name} için kayıtlı anahtar yok"))?;
+    let model = settings.model_for(&id);
+
+    let mut turns: Vec<Turn> = history.into_iter().rev().take(12).collect();
+    turns.reverse();
+    while turns.first().is_some_and(|turn| !turn.is_user()) {
+        turns.remove(0);
+    }
+    if !turns.last().is_some_and(Turn::is_user) {
+        return Err("Son mesaj kullanıcıdan gelmeli".into());
+    }
+
+    let started = std::time::Instant::now();
+    let request = (id.clone(), key, model.clone(), turns);
+    let text = tauri::async_runtime::spawn_blocking(move || {
+        let (provider, key, model, turns) = request;
+        ask(&provider, &key, &model, &turns)
+    })
+    .await
+    .map_err(|err| err.to_string())??;
+
+    Ok(Answer {
+        text,
+        provider: id,
+        model,
+        latency_ms: started.elapsed().as_millis() as u64,
+    })
 }

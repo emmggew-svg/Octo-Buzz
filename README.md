@@ -25,8 +25,10 @@ yazılmış, masaüstünde transparan ve tıklamaları geçiren bir katman olara
 - **API bölümü.** Gemini, Claude, OpenRouter ve NVIDIA NIM için anahtar kaydetme /
   silme, aktif sağlayıcı ve model seçimi, tek tuşla bağlantı testi (gecikme ms olarak
   görünür) ve sağlayıcının kendi model listesini çekme. Anahtarlar **Windows kimlik
-  deposunda** (`keyring`) durur; diske ve webview katmanına yazılmaz, ekranda yalnızca
-  son dört karakteri görünür.
+  deposunda** (`keyring`, `windows-native`) durur; diske ve webview katmanına yazılmaz,
+  ekranda yalnızca son dört karakteri görünür. Kaydetme sonrası değer kasadan geri
+  okunur, başarısızsa sessiz kalmayıp hata olarak görünür. Odak sorunlarında takılıp
+  kalmaması için alanın yanında **pano** düğmesi var: anahtarı panodan doğrudan alır.
 - **Sohbet dock'u (sağda, her zaman açık).** Mesaj yazınca ahtapot seçili modelle
   konuşur; cevap hem dock'taki balonlarda hem de panelin altında bir **konuşma balonu**
   olarak görünür (beklerken üç nokta). Sol kenarındaki tutamacı sürükleyerek

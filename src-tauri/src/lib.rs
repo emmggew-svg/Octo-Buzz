@@ -211,6 +211,7 @@ pub fn run() {
             api::api_test,
             api::api_models,
             api::open_key_page,
+            api::clipboard_key,
             api::chat_send
         ])
         .plugin(

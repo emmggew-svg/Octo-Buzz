@@ -102,29 +102,50 @@ function detail(provider: Provider): HTMLDivElement {
     eye.textContent = shown ? "göster" : "gizle";
   });
 
+  const pano = el("button", "mini", "pano");
+  pano.type = "button";
+  pano.title = "Anahtarı panodan al";
+  pano.addEventListener("click", async () => {
+    try {
+      draftKey = await call<string>("clipboard_key");
+      keyInput.value = draftKey;
+      lastProbe = { ok: true, message: "panodan alındı, Kaydet'e bas", latencyMs: 0 };
+    } catch (error) {
+      lastProbe = { ok: false, message: String(error), latencyMs: 0 };
+    }
+    render();
+  });
+
   const keyRow = el("div", "field-row");
-  keyRow.append(keyInput, eye);
+  keyRow.append(keyInput, eye, pano);
   keyField.append(keyRow);
 
   const save = el("button", "btn primary", pending === "save" ? "kaydediliyor…" : "Kaydet");
   save.type = "button";
-  save.disabled = pending !== null || !draftKey.trim();
+  save.disabled = pending !== null;
   keyInput.addEventListener("input", () => {
     draftKey = keyInput.value;
-    save.disabled = !draftKey.trim();
   });
   save.addEventListener("click", async () => {
+    if (!draftKey.trim()) {
+      lastProbe = { ok: false, message: "Alan boş — önce anahtarı yapıştır", latencyMs: 0 };
+      render();
+      return;
+    }
     pending = "save";
     render();
     try {
-      await call("api_save_key", { provider: provider.id, key: draftKey });
+      providers = await call<Provider[]>("api_save_key", { provider: provider.id, key: draftKey });
+      const stored = providers.find((p) => p.id === provider.id)?.hasKey;
+      lastProbe = stored
+        ? { ok: true, message: "kaydedildi, kasadan geri okundu", latencyMs: 0 }
+        : { ok: false, message: "kayıt emri gitti ama kasa boş dönüyor", latencyMs: 0 };
       draftKey = "";
-      lastProbe = null;
     } catch (error) {
       lastProbe = { ok: false, message: String(error), latencyMs: 0 };
     }
     pending = null;
-    await reload();
+    render();
   });
 
   const clear = el("button", "btn", confirmClear ? "Emin misin?" : "Sil");
@@ -137,8 +158,13 @@ function detail(provider: Provider): HTMLDivElement {
       return;
     }
     confirmClear = false;
-    await call("api_clear_key", { provider: provider.id }).catch(() => {});
-    await reload();
+    try {
+      providers = await call<Provider[]>("api_clear_key", { provider: provider.id });
+      lastProbe = { ok: true, message: "anahtar kasadan silindi", latencyMs: 0 };
+    } catch (error) {
+      lastProbe = { ok: false, message: String(error), latencyMs: 0 };
+    }
+    render();
   });
 
   const get = el("button", "btn link", "Anahtar al");

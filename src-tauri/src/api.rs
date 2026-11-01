@@ -329,6 +329,15 @@ pub fn api_save_key(app: AppHandle, provider: String, key: String) -> Result<Vec
     credential(provider)?
         .set_password(key)
         .map_err(|err| format!("anahtar kaydedilemedi: {err}"))?;
+
+    // Read it straight back: a store that silently drops the write must not look like success.
+    let back = credential(provider)?
+        .get_password()
+        .map_err(|err| format!("kayıt sonrası kasadan okunamadı: {err}"))?;
+    if back != key {
+        return Err("Kayıt sonrası kasadan farklı bir değer okundu".into());
+    }
+
     Ok(provider_list(&app))
 }
 
@@ -562,6 +571,21 @@ fn ask(provider: &str, key: &str, model: &str, turns: &[Turn]) -> Result<String,
 }
 
 #[tauri::command]
+pub fn clipboard_key() -> Result<String, String> {
+    let mut clipboard =
+        arboard::Clipboard::new().map_err(|err| format!("pano açılamadı: {err}"))?;
+    let text = clipboard
+        .get_text()
+        .map_err(|_| "Panoda metin yok".to_string())?
+        .trim()
+        .to_string();
+    if text.is_empty() {
+        return Err("Panoda metin yok".into());
+    }
+    Ok(text)
+}
+
+#[tauri::command]
 pub async fn chat_send(app: AppHandle, history: Vec<Turn>) -> Result<Answer, String> {
     let settings = load_settings(&app);
     let id = settings
@@ -597,3 +621,4 @@ pub async fn chat_send(app: AppHandle, history: Vec<Turn>) -> Result<Answer, Str
         latency_ms: started.elapsed().as_millis() as u64,
     })
 }
+

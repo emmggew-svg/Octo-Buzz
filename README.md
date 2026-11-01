@@ -1,3 +1,5 @@
+![Octo-Buzz](assets/readme-banner.jpg)
+
 # Octo-Buzz
 
 Ekranın üst-ortasında duran, fareni takip eden pixel-art ahtapot. Tauri + WebView ile
@@ -42,6 +44,8 @@ ikonları türetilir:
 node tools/make-icon.mjs
 npx tauri icon assets/icon.png
 ```
+
+`assets/readme-banner.jpg` yalnızca README kapak görselidir, uygulamanın ekran görüntüsü değildir.
 
 ## Proje yapısı
 
